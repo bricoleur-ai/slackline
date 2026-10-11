@@ -1,0 +1,24 @@
+# Inverted from the old approach: the image copies the whole tree and this file decides what
+# stays out. Enumerating what to COPY silently broke the image every time a new source
+# directory appeared (stores/, then transports/, then bridges/) — the failure only showed at
+# runtime, inside a container, as a missing module.
+node_modules
+npm-debug.log
+.git
+.gitignore
+.github
+.superpowers
+.env
+.slackline/
+.env.*
+!.env.example
+*.db
+*.db-*
+blobs/
+packages/dist/
+pw-profile/
+*.log
+*tokens*.json
+docs/
+test/
+deploy/

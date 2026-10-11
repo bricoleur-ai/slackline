@@ -1,0 +1,101 @@
+name: publish-image
+
+# Builds and publishes the slackline image to GHCR — the "no-clone" deploy path
+# (docker-compose.yml) pulls exactly what this workflow pushes.
+#
+# Trigger: pushes to main (keeps `latest` current) and version tags (adds a
+# semver tag on top, for anyone who wants to pin). No PR trigger — this workflow PUSHES
+# images, and a fork/PR run would need write access to packages it shouldn't get.
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch: {}   # manual re-publish, e.g. to pick up a base-image security patch
+
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # A postgres service so test/store-apps-postgres.test.mjs runs too, not just the 172
+    # backend-agnostic tests — the point of gating publish on tests is to actually cover what
+    # gets shipped, and Postgres is the backend every compose deploy uses.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: slackline
+          POSTGRES_PASSWORD: slackline
+          POSTGRES_DB: slackline
+        ports:
+          - 5440:5432
+        options: >-
+          --health-cmd "pg_isready -U slackline"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm ci
+
+      - run: npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # the only permission this workflow needs — GITHUB_TOKEN, no extra secrets
+    steps:
+      - uses: actions/checkout@v4
+
+      # QEMU + buildx: cross-build linux/arm64 on the amd64 runner GitHub provides. This repo
+      # has no native addons in its dependency tree (pg, ws, @modelcontextprotocol/sdk are all
+      # pure JS — see package.json), so there is no node-gyp compile step to pay for twice; the
+      # arm64 leg costs roughly its emulated-copy time, not a native recompile. That tradeoff is
+      # what makes "build both, every push" reasonable here. If a native dependency is ever
+      # added, re-check build time and consider splitting into a per-arch matrix + manifest
+      # merge instead of one QEMU-emulated job.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # latest + short sha on every run this job does; a semver tag is added automatically
+      # only when the triggering ref is a version tag (type=semver is a no-op on branch pushes).
+      # The image name is derived from the repository, so a fork publishes to its OWN package
+      # with no edit. It has to be lowercased here: `github.repository` keeps the owner's
+      # casing (e.g. `MyOrg/slackline`) and GHCR rejects any uppercase character in a path.
+      - id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short,prefix=
+            type=semver,pattern={{version}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

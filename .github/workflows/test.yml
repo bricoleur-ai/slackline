@@ -1,0 +1,27 @@
+name: test
+
+# Runs for pull requests as well as pushes, so an outside contributor gets a signal
+# on their own fork. Deliberately separate from publish-image.yml, which pushes to a
+# registry and therefore must NOT run for forks.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci || npm install
+      - run: npm test

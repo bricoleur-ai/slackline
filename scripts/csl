@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# csl -- Claude Code with permission prompts skipped and slackline's real-time Slack push
+# turned on. Every argument you pass is forwarded to claude unchanged:
+#
+#   csl                          new session
+#   csl -c                       continue the most recent session
+#   csl --resume <session-id>    resume a specific session
+#   csl --model opus "fix the build"
+#
+# It is a real executable, not a shell function, so it works the same inside tmux, as a tmux
+# command (`tmux new -s demo csl`), from an IDE task, and when called from other scripts — the
+# places where the `claude` function from agents/shell-init.sh does not apply.
+#
+# The channels flag itself is added by claude-channels.sh, and only where a slackline server
+# will actually push for the directory you launch from (check with `slackline route`).
+exec "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/claude-channels.sh" --dangerously-skip-permissions "$@"

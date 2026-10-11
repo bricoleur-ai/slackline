@@ -1,0 +1,9 @@
+{
+  "defaults": [
+    { "org": "acme", "channels": ["D0EXAMPLE01"] }
+  ],
+  "routes": [
+    { "dir": "/home/you/projects/example", "org": "acme", "channels": ["C0EXAMPLE02", "C0EXAMPLE03"] },
+    { "dir": "/home/you/projects/example", "org": "Globex Corp", "channels": ["C0EXAMPLE04"] }
+  ]
+}

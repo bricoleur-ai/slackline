@@ -1,0 +1,45 @@
+{
+  "name": "slackline",
+  "version": "0.1.0",
+  "description": "Live Slack context layer for AI agents \u2014 Postgres/SQLite/memory backends, standalone or MCP server.",
+  "license": "MIT",
+  "private": true,
+  "author": "DynamoFoundry LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bricoleur-ai/slackline.git"
+  },
+  "homepage": "https://bricoleur.ai/projects/slackline",
+  "bugs": {
+    "url": "https://github.com/bricoleur-ai/slackline/issues"
+  },
+  "keywords": [
+    "slack",
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "context",
+    "sqlite",
+    "postgres"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "type": "module",
+  "bin": {
+    "slackline-mcp": "mcp.mjs",
+    "slackline": "cli.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "standalone": "node standalone.mjs",
+    "mcp": "node mcp.mjs",
+    "cli": "node cli.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "ws": "^8.18.0",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

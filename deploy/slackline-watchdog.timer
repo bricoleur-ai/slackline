@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the slackline pipeline watchdog every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+# If the machine was asleep, check on wake rather than silently skipping the window.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

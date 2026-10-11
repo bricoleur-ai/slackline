@@ -1,0 +1,98 @@
+# slackline — no-clone deploy: download this file + .env.example, then
+#   cp .env.example .env  &&  edit .env  &&  docker compose up -d
+# This PULLS ${SLACKLINE_IMAGE:-ghcr.io/bricoleur-ai/slackline:latest}. If you run it from a
+# PRIVATE fork, that package is private too — `docker login ghcr.io` first. See docs/deploy.md
+# for the full no-clone path, how to verify the deploy, and how to read logs.
+#
+# Developing slackline itself? Build from this checkout instead of pulling:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# (docker-compose.dev.yml overrides `image:` with `build: .` for api + ingest — see that file.)
+#
+# Collectors run OUTSIDE this compose (they need a browser for SSO) and POST a
+# session token to http://<host>:${SLACKLINE_PORT}/tokens with the shared secret.
+name: slackline
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${PGUSER:-slackline}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?set PGPASSWORD in .env}
+      POSTGRES_DB: ${PGDATABASE:-slackline}
+    volumes:
+      - slackline_pgdata:/var/lib/postgresql/data
+    ports:
+      - "${PG_EXPOSE:-5440}:5432"          # host port; container is always 5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-slackline}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:                                     # HTTP API + install page; redeploy freely (socket lives in ingest)
+    image: ${SLACKLINE_IMAGE:-ghcr.io/bricoleur-ai/slackline:latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${PGUSER:-slackline}:${PGPASSWORD:?set PGPASSWORD in .env}@postgres:5432/${PGDATABASE:-slackline}
+      SLACKLINE_PORT: 8790
+      SLACKLINE_SECRET: ${SLACKLINE_SECRET:?set SLACKLINE_SECRET in .env}
+      SLACKLINE_RETAIN_DAYS: ${SLACKLINE_RETAIN_DAYS:-7}
+      SLACKLINE_BLOB_DIR: /app/blobs
+      # Slack-mediated key requests. Compose passes an explicit env allowlist, so these must be
+      # listed here or api.mjs never sees them and the flow silently does nothing.
+      SLACKLINE_KEY_APPROVER: ${SLACKLINE_KEY_APPROVER:-}
+      SLACKLINE_KEY_APPROVER_ORG: ${SLACKLINE_KEY_APPROVER_ORG:-}
+      SLACKLINE_KEY_REQUEST_TTL_MS: ${SLACKLINE_KEY_REQUEST_TTL_MS:-600000}
+      SLACKLINE_KEY_MESSAGE_TTL_MS: ${SLACKLINE_KEY_MESSAGE_TTL_MS:-180000}
+      SLACKLINE_KEY_REQUEST_MAX_PENDING: ${SLACKLINE_KEY_REQUEST_MAX_PENDING:-5}
+      SLACKLINE_KEY_REQUEST_RATE_MAX: ${SLACKLINE_KEY_REQUEST_RATE_MAX:-10}
+      SLACKLINE_KEY_REQUEST_RATE_WINDOW_MS: ${SLACKLINE_KEY_REQUEST_RATE_WINDOW_MS:-3600000}
+    ports:
+      - "${SLACKLINE_PORT:-8790}:8790"
+    volumes:
+      - slackline_blobs:/app/blobs
+    healthcheck:
+      # /health is loopback-exempt (see authed() in api.mjs), so this needs no secret from
+      # inside the container. A 200 means the HTTP server is actually accepting and answering
+      # requests, not just that the process exists — that is the wedged-but-"running" case
+      # this is meant to catch.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "--tries=1", "http://127.0.0.1:8790/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+
+  ingest:                                  # connection-holder: owns the Slack socket(s), stays up across API deploys
+    image: ${SLACKLINE_IMAGE:-ghcr.io/bricoleur-ai/slackline:latest}
+    command: ["node", "ingestd.mjs"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${PGUSER:-slackline}:${PGPASSWORD:?set PGPASSWORD in .env}@postgres:5432/${PGDATABASE:-slackline}
+      SLACKLINE_BLOB_DIR: /app/blobs
+    volumes:
+      - slackline_blobs:/app/blobs
+    healthcheck:
+      # ingestd.mjs has no HTTP surface — it only holds Slack sockets and a Postgres
+      # connection, so there is no health endpoint to call. What this proves:
+      # the container can still open a fresh Postgres connection with ingestd's own
+      # credentials, which is the one dependency it cannot do anything without (persisting
+      # messages, LISTENing for token/app pushes on slackline_ctl). It will NOT prove the Slack
+      # socket itself is connected, or catch a wedged-but-alive event loop that still happens to
+      # hold its DB connection open — that would need a heartbeat inside ingestd.mjs itself
+      # (see docs/deploy.md).
+      test: ["CMD", "node", "-e", "const{Client}=require(\"pg\");const c=new Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:4000});c.connect().then(()=>c.query(\"SELECT 1\")).then(()=>c.end()).then(()=>process.exit(0)).catch(e=>{console.error(\"ingest healthcheck:\",e.message);process.exit(1)})"]
+      interval: 30s
+      timeout: 8s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  slackline_pgdata:
+  slackline_blobs:

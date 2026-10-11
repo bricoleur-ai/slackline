@@ -1,0 +1,31 @@
+# Developer override: build slackline from THIS checkout instead of pulling the published
+# image. Layer it on top of docker-compose.yml — never run it alone, it has no `postgres`
+# service of its own:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# Why an override file rather than editing docker-compose.yml: docker-compose.yml alone must
+# stay pullable with nothing but itself + .env (the no-clone path — see docs/deploy.md). This
+# file exists only in a checkout, so a bare `docker compose up -d` from a downloaded compose
+# file never sees it and still pulls the published image by default.
+#
+# `image:` is left as-is (inherited from docker-compose.yml) — Compose names the image it
+# builds with that tag, so the result is a normal local image under the same name the base
+# file would otherwise have pulled. `pull_policy: build` pins the intent explicitly (build,
+# never pull) so a same-tagged image already sitting in the local cache never shadows a source
+# change you just made; run with `--build` (as above) to also force a rebuild when only
+# dependency layers, not source, changed.
+name: slackline
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: build
+
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: build

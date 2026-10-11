@@ -1,0 +1,17 @@
+[Unit]
+Description=slackline pipeline watchdog (alerts into Slack when QA delivery breaks)
+Documentation=file://<REPO_DIR>/docs/bridge.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=<REPO_DIR>
+EnvironmentFile=%h/.slackline/bridge.env
+# --notify goes to a TECHNICAL channel, not the QA channel: a non-technical reporter seeing
+# infrastructure alarms learns nothing useful and loses trust in the channel.
+# Deliberately NOT --quiet: a healthy run must still leave a heartbeat, otherwise an empty log
+# is ambiguous between "always healthy" and "never ran".
+ExecStart=<ABS_PATH_TO_NODE> scripts/watchdog.mjs --channel <QA_CHANNEL_ID> --tmux <TMUX_SESSION> --notify <ALERTS_CHANNEL_ID>
+# Degraded exits 1 by design; that is a report, not a unit failure.
+SuccessExitStatus=0 1
+StandardOutput=append:%h/.slackline/logs/watchdog.log
+StandardError=append:%h/.slackline/logs/watchdog.log

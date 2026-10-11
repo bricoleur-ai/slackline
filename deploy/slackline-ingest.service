@@ -1,0 +1,38 @@
+[Unit]
+Description=slackline ingest daemon (holds the Slack socket, buffers to the store)
+Documentation=file://<REPO_DIR>/docs/bridge.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=<REPO_DIR>
+# Tokens live here, mode 0600. Not passed on the command line, where ps would expose them.
+EnvironmentFile=%h/.slackline/bridge.env
+# Absolute path: systemd does not source a login shell, so nvm's node is not on PATH.
+ExecStart=<ABS_PATH_TO_NODE> standalone.mjs
+
+# The whole point of this unit: if ingest dies, buffering stops silently and a reporter's
+# messages vanish. Always come back, and never give up permanently.
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+# On some hosts journald does not keep user-unit logs, so write to a file we control —
+# an unobservable daemon is nearly as bad as a dead one.
+StandardOutput=append:%h/.slackline/logs/ingest.log
+StandardError=append:%h/.slackline/logs/ingest.log
+SyslogIdentifier=slackline-ingest
+
+[Install]
+WantedBy=default.target
+
+# Install (user unit — no root needed):
+#   sed -e 's#<REPO_DIR>#'"$PWD"'#' -e 's#<ABS_PATH_TO_NODE>#'"$(command -v node)"'#' \
+#     deploy/slackline-ingest.service > ~/.config/systemd/user/slackline-ingest.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now slackline-ingest
+#   loginctl enable-linger "$USER"      # so it starts at boot, not just at login
+#
+# Credentials come from ~/.slackline/bridge.env (mode 0600), NOT the command line —
+# anything on the command line is visible to `ps` for every user on the box.

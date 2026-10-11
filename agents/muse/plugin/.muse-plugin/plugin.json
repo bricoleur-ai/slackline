@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "name": "slackline",
+  "displayName": "Slackline",
+  "version": "0.1.0",
+  "description": "Pushes Slack messages routed to this directory into the session, through slackline.",
+  "compat": {
+    "source": "native",
+    "manifestDir": ".muse-plugin"
+  },
+  "capabilities": {
+    "hooks": [
+      { "id": "session-start", "event": "SessionStart", "command": ["sh", "hooks/session-start.sh"], "timeoutMs": 5000 },
+      { "id": "session-end", "event": "SessionEnd", "command": ["sh", "hooks/session-end.sh"], "timeoutMs": 5000 }
+    ]
+  }
+}
