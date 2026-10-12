@@ -78,16 +78,19 @@ It worked if `slack_whoami` names your Slack account.
 
 ### A hub for many agents
 
-One always-on host holds the Slack connection, and every agent talks to it over HTTP. No clone is
-needed on the host; the compose file pulls a published image:
+One always-on host holds the Slack connection, and every agent talks to it over HTTP. Build
+from your checkout for the initial release:
 
 ```bash
-mkdir -p ~/srv/slackline && cd ~/srv/slackline
-curl -fsSLO https://raw.githubusercontent.com/bricoleur-ai/slackline/main/docker-compose.yml
-printf 'SLACKLINE_SECRET=%s\nPGPASSWORD=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 16)" > .env
-chmod 600 .env
-docker compose up -d
+cd ~/slackline
+(umask 077; printf 'SLACKLINE_SECRET=%s\nPGPASSWORD=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 16)" > .env)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
+
+The override builds the API and ingestion image locally instead of pulling from GHCR. The
+published image has been built by CI, but its package is currently private; anonymous image
+pulls are not available yet. Use the source-build path above until package visibility changes.
+The base Compose file by itself is the no-clone image-pull path documented in `docs/deploy.md`.
 
 Open `http://<host>:8790/`. The install page walks you through handing the hub a Slack
 credential. From another machine `/health` needs the secret, so check it from the directory that
