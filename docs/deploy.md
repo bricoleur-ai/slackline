@@ -13,6 +13,14 @@ difference is whether `api`/`ingest` come from a pulled image or a local build.
 
 ---
 
+## Initial release: build from source
+
+The repository is public. Its CI-built GHCR package is currently private, so anonymous pulls
+return `403`. Start with [Build from a checkout](#develop-build-from-a-checkout) below; that
+path builds the API and ingestion image locally and needs no GHCR sign-in. The no-clone path
+becomes available when the package is public. This limitation does not affect local MCP mode
+or a standalone service run from the public checkout.
+
 ## No-clone: adopt a published image
 
 You need exactly two files — no `git clone`, no local build.
